@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+backend/.venv/
+
+# Environment variables
+.env
+
+# SQLite database
+*.db
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
+# Build files
+dist/
+build/
