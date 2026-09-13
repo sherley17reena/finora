@@ -16,3 +16,15 @@ class TransactionCreate(BaseModel):
     amount: float
     category: str
     type: str
+
+class SavingsGoalCreate(BaseModel):
+    name: str
+    target_amount: float
+    current_amount: float = 0
+    target_date: str
+
+class BudgetCreate(BaseModel):
+    month: str
+    category: str
+    budget_amount: float
+    spent_amount: float = 0

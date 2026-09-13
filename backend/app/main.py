@@ -2,10 +2,13 @@ from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal
-from .models import FinancialProfile, Transaction
-from .schemas import FinancialProfileCreate, TransactionCreate
-
-
+from .models import FinancialProfile, Transaction, SavingsGoal, Budget
+from .schemas import (
+    FinancialProfileCreate,
+    TransactionCreate,
+    SavingsGoalCreate,
+    BudgetCreate
+)
 app = FastAPI()
 
 
@@ -92,3 +95,58 @@ def get_transactions(db: Session = Depends(get_db)):
     transactions = db.query(Transaction).all()
 
     return transactions
+
+@app.post("/savings-goals")
+def create_savings_goal(
+    goal: SavingsGoalCreate,
+    db: Session = Depends(get_db)
+):
+    new_goal = SavingsGoal(
+        name=goal.name,
+        target_amount=goal.target_amount,
+        current_amount=goal.current_amount,
+        target_date=goal.target_date
+    )
+
+    db.add(new_goal)
+    db.commit()
+    db.refresh(new_goal)
+
+    return {
+        "message": "Savings goal created successfully",
+        "goal_id": new_goal.id
+    }
+
+@app.get("/savings-goals")
+def get_savings_goals(db: Session = Depends(get_db)):
+    goals = db.query(SavingsGoal).all()
+
+    return goals
+
+@app.post("/budgets")
+def create_budget(
+    budget: BudgetCreate,
+    db: Session = Depends(get_db)
+):
+    new_budget = Budget(
+        month=budget.month,
+        category=budget.category,
+        budget_amount=budget.budget_amount,
+        spent_amount=budget.spent_amount
+    )
+
+    db.add(new_budget)
+    db.commit()
+    db.refresh(new_budget)
+
+    return {
+        "message": "Budget created successfully",
+        "budget_id": new_budget.id
+    }
+
+
+@app.get("/budgets")
+def get_budgets(db: Session = Depends(get_db)):
+    budgets = db.query(Budget).all()
+
+    return budgets
