@@ -28,3 +28,7 @@ class BudgetCreate(BaseModel):
     category: str
     budget_amount: float
     spent_amount: float = 0
+
+class PurchaseAnalysisRequest(BaseModel):
+    purchase_amount: float
+    goal_id: int

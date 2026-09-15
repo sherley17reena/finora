@@ -1,6 +1,12 @@
 from sqlalchemy.orm import Session
 
-from .models import Transaction, FinancialProfile, SavingsGoal, Budget
+from .models import (
+    Transaction,
+    FinancialProfile,
+    SavingsGoal,
+    Budget,
+    AgentLog
+)
 from datetime import date, datetime
 
 def add_expense(
@@ -188,3 +194,26 @@ def get_budget_status(db: Session, budget_id: int):
         "remaining_amount": remaining_amount,
         "percentage_used": round(percentage_used, 2)
     }
+
+def log_agent_action(
+    db: Session,
+    agent: str,
+    action: str,
+    tool: str,
+    arguments: str,
+    result: str
+):
+    log = AgentLog(
+        agent=agent,
+        action=action,
+        tool=tool,
+        arguments=arguments,
+        result=result,
+        timestamp=datetime.now().isoformat()
+    )
+
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    return log

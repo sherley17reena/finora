@@ -1,13 +1,21 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
+from app.coordinator import FinanceCoordinator
 
 from .database import SessionLocal
-from .models import FinancialProfile, Transaction, SavingsGoal, Budget
+from app.models import (
+    FinancialProfile,
+    Transaction,
+    SavingsGoal,
+    Budget,
+    AgentLog
+)
 from .schemas import (
     FinancialProfileCreate,
     TransactionCreate,
     SavingsGoalCreate,
-    BudgetCreate
+    BudgetCreate,
+    PurchaseAnalysisRequest
 )
 app = FastAPI()
 
@@ -150,3 +158,39 @@ def get_budgets(db: Session = Depends(get_db)):
     budgets = db.query(Budget).all()
 
     return budgets
+
+@app.post("/analyze-purchase")
+def analyze_purchase(
+    request: PurchaseAnalysisRequest,
+    db: Session = Depends(get_db)
+):
+    coordinator = FinanceCoordinator(db)
+
+    result = coordinator.analyze_purchase_with_savings(
+        purchase_amount=request.purchase_amount,
+        goal_id=request.goal_id
+    )
+
+    return result
+
+@app.get("/agent-logs")
+def get_agent_logs(db: Session = Depends(get_db)):
+
+    logs = (
+        db.query(AgentLog)
+        .order_by(AgentLog.id.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": log.id,
+            "agent": log.agent,
+            "action": log.action,
+            "tool": log.tool,
+            "arguments": log.arguments,
+            "result": log.result,
+            "timestamp": log.timestamp
+        }
+        for log in logs
+    ]
