@@ -31,7 +31,7 @@ function Dashboard({ summary }) {
         </div>
 
         <div className="card">
-          <p>Total Expenses</p>
+          <p>Expenses This Month</p>
           <h3>
             {summary
               ? `$${summary.total_expenses.toLocaleString()}`

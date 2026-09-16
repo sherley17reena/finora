@@ -192,6 +192,8 @@ function App() {
 
       fetchTransactions();
       fetchDashboard();
+      fetchBudgets();
+      
     } catch (error) {
       console.error("Error adding expense:", error);
       setMessage("Could not add expense. Please try again.");
@@ -269,6 +271,10 @@ function App() {
           <Savings
             savingsGoals={savingsGoals}
             savingsProgress={savingsProgress}
+            onGoalsUpdated={async () => {
+              await fetchSavingsGoals();
+              fetchDashboard();
+            }}
           />
         )}
 
@@ -276,6 +282,7 @@ function App() {
           <Budgets
             budgets={budgets}
             budgetStatus={budgetStatus}
+            onBudgetsUpdated={fetchBudgets}
           />
         )}
         {activePage === "assistant" && (

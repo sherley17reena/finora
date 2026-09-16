@@ -36,6 +36,16 @@ export function getSavingsProgress(goalId) {
   return request(`/savings-goals/${goalId}/progress`);
 }
 
+export function createSavingsGoal(goal) {
+  return request("/savings-goals", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(goal),
+  });
+}
+
 export function getBudgets() {
   return request("/budgets");
 }
@@ -59,4 +69,14 @@ export function analyzePurchase(purchaseAmount, goalId) {
 
 export function getAgentLogs() {
   return request("/agent-logs");
+}
+
+export function createBudget(budget) {
+  return request("/budgets", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(budget),
+  });
 }

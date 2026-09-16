@@ -40,6 +40,31 @@ def get_expenses(db: Session):
 
     return expenses
 
+def get_current_month_expenses(db: Session):
+    current_month = date.today().strftime("%Y-%m")
+
+    expenses = (
+        db.query(Transaction)
+        .filter(Transaction.type == "expense")
+        .all()
+    )
+
+    current_month_expenses = [
+        expense
+        for expense in expenses
+        if expense.date
+        and expense.date.startswith(current_month)
+    ]
+
+    return current_month_expenses
+
+def get_current_month_expense_total(db: Session):
+    expenses = get_current_month_expenses(db)
+
+    return round(
+        sum(expense.amount for expense in expenses),
+        2
+    )
 
 def get_income(db: Session):
     profile = db.query(FinancialProfile).first()
@@ -55,18 +80,23 @@ def calculate_remaining_income(db: Session):
     if profile is None:
         return 0
 
-    total_expenses = (
+    fixed_commitments = (
         profile.rent
         + profile.tuition
-        + profile.groceries
-        + profile.transport
         + profile.utilities
-        + profile.lifestyle_costs
     )
 
-    remaining_income = profile.monthly_income - total_expenses
+    current_month_spending = (
+        get_current_month_expense_total(db)
+    )
 
-    return remaining_income
+    remaining_income = (
+        profile.monthly_income
+        - fixed_commitments
+        - current_month_spending
+    )
+
+    return round(remaining_income, 2)
 
 def simulate_purchase(db: Session, purchase_amount: float):
     remaining_income = calculate_remaining_income(db)
@@ -82,11 +112,8 @@ def simulate_purchase(db: Session, purchase_amount: float):
         "can_afford": can_afford
     }
 def get_total_expenses(db: Session):
-    expenses = get_expenses(db)
-
-    total = sum(expense.amount for expense in expenses)
-
-    return total
+    
+    return get_current_month_expense_total(db)
 
 def get_savings_goals(db: Session):
     return db.query(SavingsGoal).all()
@@ -176,13 +203,33 @@ def get_budget_status(db: Session, budget_id: int):
     if budget is None:
         return None
 
-    remaining_amount = budget.budget_amount - budget.spent_amount
+    transactions = (
+        db.query(Transaction)
+        .filter(Transaction.type == "expense")
+        .all()
+    )
+
+    spent_amount = 0
+
+    for transaction in transactions:
+        transaction_month = transaction.date[:7]
+
+        if (
+            transaction_month == budget.month
+            and transaction.category.lower()
+            == budget.category.lower()
+        ):
+            spent_amount += transaction.amount
+
+    remaining_amount = (
+        budget.budget_amount - spent_amount
+    )
 
     if budget.budget_amount <= 0:
         percentage_used = 0
     else:
         percentage_used = (
-            budget.spent_amount / budget.budget_amount
+            spent_amount / budget.budget_amount
         ) * 100
 
     return {
@@ -190,9 +237,9 @@ def get_budget_status(db: Session, budget_id: int):
         "month": budget.month,
         "category": budget.category,
         "budget_amount": budget.budget_amount,
-        "spent_amount": budget.spent_amount,
-        "remaining_amount": remaining_amount,
-        "percentage_used": round(percentage_used, 2)
+        "spent_amount": round(spent_amount, 2),
+        "remaining_amount": round(remaining_amount, 2),
+        "percentage_used": round(percentage_used, 2),
     }
 
 def log_agent_action(
