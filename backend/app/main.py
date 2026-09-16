@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.coordinator import FinanceCoordinator
 
@@ -17,8 +18,25 @@ from .schemas import (
     BudgetCreate,
     PurchaseAnalysisRequest
 )
+
+from app.tools import (
+    calculate_remaining_income,
+    get_total_expenses,
+    get_savings_progress
+)
+
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_db():
     db = SessionLocal()
@@ -194,3 +212,67 @@ def get_agent_logs(db: Session = Depends(get_db)):
         }
         for log in logs
     ]
+
+@app.get("/dashboard-summary")
+def get_dashboard_summary(db: Session = Depends(get_db)):
+
+    profile = db.query(FinancialProfile).first()
+
+    if profile is None:
+        return {
+            "status": "error",
+            "message": "No financial profile found"
+        }
+
+    remaining_income = calculate_remaining_income(db)
+    total_expenses = get_total_expenses(db)
+
+    goals = db.query(SavingsGoal).all()
+
+    savings_progress = 0
+
+    if goals:
+        progress = get_savings_progress(
+            db,
+            goal_id=goals[0].id
+        )
+
+        if progress:
+            savings_progress = progress["progress_percentage"]
+
+    return {
+        "monthly_income": profile.monthly_income,
+        "available_income": remaining_income,
+        "total_expenses": total_expenses,
+        "savings_progress": savings_progress
+    }
+
+@app.get("/savings-goals/{goal_id}/progress")
+def get_savings_goal_progress(
+    goal_id: int,
+    db: Session = Depends(get_db)
+):
+    coordinator = FinanceCoordinator(db)
+
+    result = coordinator.route(
+        agent_name="savings",
+        action="get_savings_progress",
+        goal_id=goal_id
+    )
+
+    return result
+
+@app.get("/budgets/{budget_id}/status")
+def get_budget_status_by_id(
+    budget_id: int,
+    db: Session = Depends(get_db)
+):
+    coordinator = FinanceCoordinator(db)
+
+    result = coordinator.route(
+        agent_name="budget",
+        action="get_budget_status",
+        budget_id=budget_id
+    )
+
+    return result
