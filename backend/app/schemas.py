@@ -32,3 +32,6 @@ class BudgetCreate(BaseModel):
 class PurchaseAnalysisRequest(BaseModel):
     purchase_amount: float
     goal_id: int
+
+class AssistantMessageRequest(BaseModel):
+    message: str

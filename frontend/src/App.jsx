@@ -10,20 +10,20 @@ import AgentActivity from "./pages/AgentActivity";
 
 import Sidebar from "./components/Sidebar";
 
+
 function App() {
   const [summary, setSummary] = useState(null);
   const [activePage, setActivePage] = useState("dashboard");
+
   const [transactions, setTransactions] = useState([]);
+
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [savingsProgress, setSavingsProgress] = useState({});
+
   const [budgets, setBudgets] = useState([]);
   const [budgetStatus, setBudgetStatus] = useState({});
 
-  const [purchaseAmount, setPurchaseAmount] = useState("");
-  const [selectedGoalId, setSelectedGoalId] = useState("");
-  const [purchaseAnalysis, setPurchaseAnalysis] = useState(null);
-  const [assistantLoading, setAssistantLoading] = useState(false);
-  const [assistantError, setAssistantError] = useState("");
+  const [agentLogs, setAgentLogs] = useState([]);
 
   const [expenseForm, setExpenseForm] = useState({
     description: "",
@@ -34,7 +34,10 @@ function App() {
 
   const [message, setMessage] = useState("");
 
-  const [agentLogs, setAgentLogs] = useState([]);
+
+  // -----------------------------
+  // Agent Activity
+  // -----------------------------
 
   const fetchAgentLogs = () => {
     fetch("http://127.0.0.1:8000/agent-logs")
@@ -43,11 +46,18 @@ function App() {
         setAgentLogs(data);
       })
       .catch((error) => {
-        console.error("Error fetching agent logs:", error);
+        console.error(
+          "Error fetching agent logs:",
+          error
+        );
       });
   };
 
-  // Fetch dashboard data
+
+  // -----------------------------
+  // Dashboard
+  // -----------------------------
+
   const fetchDashboard = () => {
     fetch("http://127.0.0.1:8000/dashboard-summary")
       .then((response) => response.json())
@@ -55,11 +65,18 @@ function App() {
         setSummary(data);
       })
       .catch((error) => {
-        console.error("Error fetching dashboard:", error);
+        console.error(
+          "Error fetching dashboard:",
+          error
+        );
       });
   };
 
-  // Fetch transaction data
+
+  // -----------------------------
+  // Transactions
+  // -----------------------------
+
   const fetchTransactions = () => {
     fetch("http://127.0.0.1:8000/transactions")
       .then((response) => response.json())
@@ -67,11 +84,18 @@ function App() {
         setTransactions(data);
       })
       .catch((error) => {
-        console.error("Error fetching transactions:", error);
+        console.error(
+          "Error fetching transactions:",
+          error
+        );
       });
   };
 
-  // Fetch savings goals and Savings Agent calculations
+
+  // -----------------------------
+  // Savings
+  // -----------------------------
+
   const fetchSavingsGoals = async () => {
     try {
       const response = await fetch(
@@ -89,20 +113,29 @@ function App() {
           `http://127.0.0.1:8000/savings-goals/${goal.id}/progress`
         );
 
-        const progressData = await progressResponse.json();
+        const progressData =
+          await progressResponse.json();
 
         if (progressData.status === "success") {
-          progressResults[goal.id] = progressData.data;
+          progressResults[goal.id] =
+            progressData.data;
         }
       }
 
       setSavingsProgress(progressResults);
     } catch (error) {
-      console.error("Error fetching savings goals:", error);
+      console.error(
+        "Error fetching savings goals:",
+        error
+      );
     }
   };
 
-  // Fetch budgets and Budget Agent calculations
+
+  // -----------------------------
+  // Budgets
+  // -----------------------------
+
   const fetchBudgets = async () => {
     try {
       const response = await fetch(
@@ -120,18 +153,28 @@ function App() {
           `http://127.0.0.1:8000/budgets/${budget.id}/status`
         );
 
-        const statusData = await statusResponse.json();
+        const statusData =
+          await statusResponse.json();
 
         if (statusData.status === "success") {
-          statusResults[budget.id] = statusData.data;
+          statusResults[budget.id] =
+            statusData.data;
         }
       }
 
       setBudgetStatus(statusResults);
     } catch (error) {
-      console.error("Error fetching budgets:", error);
+      console.error(
+        "Error fetching budgets:",
+        error
+      );
     }
   };
+
+
+  // -----------------------------
+  // Initial Data Load
+  // -----------------------------
 
   useEffect(() => {
     fetchDashboard();
@@ -141,7 +184,11 @@ function App() {
     fetchAgentLogs();
   }, []);
 
-  // Update expense form fields
+
+  // -----------------------------
+  // Expense Form
+  // -----------------------------
+
   const handleExpenseChange = (event) => {
     const { name, value } = event.target;
 
@@ -151,7 +198,11 @@ function App() {
     }));
   };
 
-  // Add a new expense
+
+  // -----------------------------
+  // Add Expense
+  // -----------------------------
+
   const handleAddExpense = async (event) => {
     event.preventDefault();
 
@@ -178,7 +229,9 @@ function App() {
       );
 
       if (!response.ok) {
-        throw new Error("Could not add expense");
+        throw new Error(
+          "Could not add expense"
+        );
       }
 
       setExpenseForm({
@@ -188,58 +241,48 @@ function App() {
         date: "",
       });
 
-      setMessage("Expense added successfully.");
+      setMessage(
+        "Expense added successfully."
+      );
 
+      // Refresh affected financial data
       fetchTransactions();
       fetchDashboard();
       fetchBudgets();
-      
+
     } catch (error) {
-      console.error("Error adding expense:", error);
-      setMessage("Could not add expense. Please try again.");
-    }
-  };
-  const handleAnalyzePurchase = async (event) => {
-  event.preventDefault();
-
-  setAssistantLoading(true);
-  setAssistantError("");
-  setPurchaseAnalysis(null);
-
-  try {
-    const response = await fetch(
-      "http://127.0.0.1:8000/analyze-purchase",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          purchase_amount: Number(purchaseAmount),
-          goal_id: Number(selectedGoalId),
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error("Could not analyze purchase");
-    }
-
-    const data = await response.json();
-
-      setPurchaseAnalysis(data);
-    } catch (error) {
-      console.error("Error analyzing purchase:", error);
-
-      setAssistantError(
-        "Could not analyze the purchase. Please try again."
+      console.error(
+        "Error adding expense:",
+        error
       );
-    } finally {
-      setAssistantLoading(false);
+
+      setMessage(
+        "Could not add expense. Please try again."
+      );
     }
   };
+
+
+  // -----------------------------
+  // Refresh after AI changes data
+  // -----------------------------
+
+  const handleAssistantDataChange = () => {
+    fetchTransactions();
+    fetchDashboard();
+    fetchSavingsGoals();
+    fetchBudgets();
+    fetchAgentLogs();
+  };
+
+
+  // -----------------------------
+  // Application
+  // -----------------------------
+
   return (
     <div className="app">
+
       <Sidebar
         activePage={activePage}
         onPageChange={(page) => {
@@ -254,20 +297,28 @@ function App() {
       <main className="main-content">
 
         {activePage === "dashboard" && (
-          <Dashboard summary={summary} />
+          <Dashboard
+            summary={summary}
+          />
         )}
+
 
         {activePage === "transactions" && (
           <Transactions
             transactions={transactions}
             expenseForm={expenseForm}
             message={message}
-            onExpenseChange={handleExpenseChange}
-            onAddExpense={handleAddExpense}
+            onExpenseChange={
+              handleExpenseChange
+            }
+            onAddExpense={
+              handleAddExpense
+            }
           />
         )}
 
-       {activePage === "savings" && (
+
+        {activePage === "savings" && (
           <Savings
             savingsGoals={savingsGoals}
             savingsProgress={savingsProgress}
@@ -278,40 +329,40 @@ function App() {
           />
         )}
 
+
         {activePage === "budgets" && (
           <Budgets
             budgets={budgets}
             budgetStatus={budgetStatus}
-            onBudgetsUpdated={fetchBudgets}
+            onBudgetsUpdated={
+              fetchBudgets
+            }
           />
         )}
+
+
         {activePage === "assistant" && (
           <Assistant
-            savingsGoals={savingsGoals}
-            purchaseAmount={purchaseAmount}
-            selectedGoalId={selectedGoalId}
-            purchaseAnalysis={purchaseAnalysis}
-            assistantLoading={assistantLoading}
-            assistantError={assistantError}
-            onPurchaseAmountChange={(event) =>
-              setPurchaseAmount(event.target.value)
+            onDataChanged={
+              handleAssistantDataChange
             }
-            onGoalChange={(event) =>
-              setSelectedGoalId(event.target.value)
-            }
-            onAnalyzePurchase={handleAnalyzePurchase}
           />
         )}
+
 
         {activePage === "activity" && (
           <AgentActivity
             agentLogs={agentLogs}
-            onRefresh={fetchAgentLogs}
+            onRefresh={
+              fetchAgentLogs
+            }
           />
         )}
+
       </main>
     </div>
   );
 }
+
 
 export default App;

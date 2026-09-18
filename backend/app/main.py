@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.coordinator import FinanceCoordinator
+from app.assistant_service import handle_assistant_message
 
 from .database import SessionLocal
 from app.models import (
@@ -16,7 +17,8 @@ from .schemas import (
     TransactionCreate,
     SavingsGoalCreate,
     BudgetCreate,
-    PurchaseAnalysisRequest
+    PurchaseAnalysisRequest,
+    AssistantMessageRequest,
 )
 
 from app.tools import (
@@ -38,6 +40,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def get_db():
     db = SessionLocal()
 
@@ -46,6 +49,15 @@ def get_db():
     finally:
         db.close()
 
+@app.post("/assistant")
+def assistant(
+    request: AssistantMessageRequest,
+    db: Session = Depends(get_db)
+):
+    return handle_assistant_message(
+        db=db,
+        message=request.message
+    )
 
 @app.get("/")
 def home():
@@ -276,3 +288,4 @@ def get_budget_status_by_id(
     )
 
     return result
+

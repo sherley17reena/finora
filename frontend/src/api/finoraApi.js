@@ -80,3 +80,14 @@ export function createBudget(budget) {
     body: JSON.stringify(budget),
   });
 }
+export function askFinora(message) {
+  return request("/assistant", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: message,
+    }),
+  });
+}
