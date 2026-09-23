@@ -102,6 +102,27 @@ The `FinanceCoordinator` routes requests to the appropriate agent and coordinate
                        │ SQLAlchemy / SQLite│
                        └────────────────────┘
 ```
+## Application Preview
+
+### Financial Dashboard
+
+Finora provides a centralized dashboard for monitoring monthly income, available income, expenses, and savings progress.
+
+![Finora Financial Dashboard](docs/screenshots/dashboard.png)
+
+### AI Financial Assistant
+
+Users can ask financial questions in natural language. Finora interprets the request and coordinates the appropriate specialized agents.
+
+In this example, a purchase decision requires both the **Budget Agent** and **Savings Agent**.
+
+![Finora AI Financial Assistant](docs/screenshots/assistant.png)
+
+### Agent Activity
+
+Finora provides an orchestration log for observing which agents and tools were executed, including their arguments and timestamps.
+
+![Finora Agent Activity](docs/screenshots/agent-activity.png)
 
 ## Design Principle
 
