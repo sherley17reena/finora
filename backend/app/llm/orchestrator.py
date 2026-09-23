@@ -1,7 +1,10 @@
 import json
 from datetime import date
 
+from pydantic import ValidationError
+
 from app.llm.gemini_client import ask_gemini
+from app.schemas import AssistantIntent
 
 
 def understand_message(message: str):
@@ -72,6 +75,7 @@ Rules:
 - Do not use Markdown.
 - Do not explain the result.
 - Monetary values must be numbers.
+- Monetary values must be greater than zero when provided.
 - If the user says "today", use {today}.
 - Choose only one of the actions listed above.
 - Never invent a savings goal or budget category.
@@ -93,13 +97,33 @@ User message:
 {message}
 """
 
-    response = ask_gemini(prompt)
-
     try:
-        return json.loads(response)
+        response = ask_gemini(prompt)
+
+        raw_intent = json.loads(response)
+
+        validated_intent = AssistantIntent.model_validate(
+            raw_intent
+        )
+
+        return validated_intent.model_dump()
+
     except json.JSONDecodeError:
         return {
             "action": "unknown",
             "error": "Gemini returned invalid JSON",
-            "raw_response": response,
+        }
+
+    except ValidationError as error:
+        return {
+            "action": "unknown",
+            "error": "Gemini returned an invalid intent",
+            "validation_errors": error.errors(),
+        }
+
+    except Exception as error:
+        return {
+            "action": "unknown",
+            "error": "Finora could not process the AI request",
+            "details": str(error),
         }

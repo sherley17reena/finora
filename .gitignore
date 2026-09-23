@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Virtual environments
 .venv/
@@ -8,6 +9,8 @@ backend/.venv/
 
 # Environment variables
 .env
+*.env
+!.env.example
 
 # SQLite database
 *.db

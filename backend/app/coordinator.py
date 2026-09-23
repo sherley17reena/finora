@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy.orm import Session
 
 from app.agents.expense_agent import ExpenseAgent
@@ -15,18 +17,67 @@ class FinanceCoordinator:
         self.budget_agent = BudgetAgent(db)
 
     # -------------------------------------------------
+    # Execute an agent action and log it
+    # -------------------------------------------------
+    def _execute_and_log(
+        self,
+        agent,
+        agent_name: str,
+        action: str,
+        **kwargs
+    ):
+        result = agent.handle(action, **kwargs)
+
+        log_agent_action(
+            db=self.db,
+            agent=agent_name,
+            action=action,
+            tool=action,
+            arguments=json.dumps(
+                kwargs,
+                default=str
+            ),
+            result=json.dumps(
+                result,
+                default=str
+            )
+        )
+
+        return result
+
+    # -------------------------------------------------
     # Manual routing
     # -------------------------------------------------
-    def route(self, agent_name: str, action: str, **kwargs):
+    def route(
+        self,
+        agent_name: str,
+        action: str,
+        **kwargs
+    ):
 
         if agent_name == "expense":
-            return self.expense_agent.handle(action, **kwargs)
+            return self._execute_and_log(
+                self.expense_agent,
+                "Expense Agent",
+                action,
+                **kwargs
+            )
 
         if agent_name == "savings":
-            return self.savings_agent.handle(action, **kwargs)
+            return self._execute_and_log(
+                self.savings_agent,
+                "Savings Agent",
+                action,
+                **kwargs
+            )
 
         if agent_name == "budget":
-            return self.budget_agent.handle(action, **kwargs)
+            return self._execute_and_log(
+                self.budget_agent,
+                "Budget Agent",
+                action,
+                **kwargs
+            )
 
         return {
             "status": "error",
@@ -36,7 +87,11 @@ class FinanceCoordinator:
     # -------------------------------------------------
     # Automatic routing
     # -------------------------------------------------
-    def auto_route(self, action: str, **kwargs):
+    def auto_route(
+        self,
+        action: str,
+        **kwargs
+    ):
 
         expense_actions = {
             "get_expenses",
@@ -57,13 +112,28 @@ class FinanceCoordinator:
         }
 
         if action in expense_actions:
-            return self.expense_agent.handle(action, **kwargs)
+            return self._execute_and_log(
+                self.expense_agent,
+                "Expense Agent",
+                action,
+                **kwargs
+            )
 
         if action in savings_actions:
-            return self.savings_agent.handle(action, **kwargs)
+            return self._execute_and_log(
+                self.savings_agent,
+                "Savings Agent",
+                action,
+                **kwargs
+            )
 
         if action in budget_actions:
-            return self.budget_agent.handle(action, **kwargs)
+            return self._execute_and_log(
+                self.budget_agent,
+                "Budget Agent",
+                action,
+                **kwargs
+            )
 
         return {
             "status": "error",
@@ -79,41 +149,20 @@ class FinanceCoordinator:
         goal_id: int
     ):
 
-        # Step 1: Ask Budget Agent about affordability
-        budget_result = self.budget_agent.handle(
+        # Step 1: Budget Agent checks affordability
+        budget_result = self.auto_route(
             "simulate_purchase",
             purchase_amount=purchase_amount
         )
 
-        # Log Budget Agent activity
-        log_agent_action(
-            db=self.db,
-            agent="Budget Agent",
-            action="simulate_purchase",
-            tool="simulate_purchase",
-            arguments=f"purchase_amount={purchase_amount}",
-            result=str(budget_result)
-        )
+        if budget_result["status"] != "success":
+            return budget_result
 
-        # Step 2: Ask Savings Agent about savings goal
-        savings_result = self.savings_agent.handle(
+        # Step 2: Savings Agent checks goal progress
+        savings_result = self.auto_route(
             "get_savings_progress",
             goal_id=goal_id
         )
-
-        # Log Savings Agent activity
-        log_agent_action(
-            db=self.db,
-            agent="Savings Agent",
-            action="get_savings_progress",
-            tool="get_savings_progress",
-            arguments=f"goal_id={goal_id}",
-            result=str(savings_result)
-        )
-
-        # Step 3: Check for errors
-        if budget_result["status"] != "success":
-            return budget_result
 
         if savings_result["status"] != "success":
             return savings_result
@@ -121,11 +170,16 @@ class FinanceCoordinator:
         budget_data = budget_result["data"]
         savings_data = savings_result["data"]
 
-        # Step 4: Use BOTH agents to make a decision
+        # Step 3: Combine both agent results
         can_afford = budget_data["can_afford"]
-        money_after_purchase = budget_data["money_after_purchase"]
 
-        savings_remaining = savings_data["remaining_amount"]
+        money_after_purchase = (
+            budget_data["money_after_purchase"]
+        )
+
+        savings_remaining = (
+            savings_data["remaining_amount"]
+        )
 
         if not can_afford:
             decision = (
@@ -146,7 +200,7 @@ class FinanceCoordinator:
                 "your progress toward your savings goal."
             )
 
-        # Step 5: Combine results from both agents
+        # Step 4: Return combined multi-agent result
         return {
             "workflow": "purchase_with_savings_analysis",
             "status": "success",
