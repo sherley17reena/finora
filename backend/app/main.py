@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.coordinator import FinanceCoordinator
@@ -14,9 +14,13 @@ from app.models import (
 )
 from .schemas import (
     FinancialProfileCreate,
+    FinancialProfileUpdate,
     TransactionCreate,
+    TransactionUpdate,
     SavingsGoalCreate,
+    SavingsGoalUpdate,
     BudgetCreate,
+    BudgetUpdate,
     PurchaseAnalysisRequest,
     AssistantMessageRequest,
 )
@@ -27,6 +31,27 @@ from app.tools import (
     get_savings_progress
 )
 
+FIXED_EXPENSE_CATEGORIES = {
+    "rent",
+    "tuition",
+    "utilities",
+}
+
+
+def validate_transaction_category(category: str, transaction_type: str):
+    if (
+        transaction_type.strip().casefold() == "expense"
+        and category.strip().casefold() in FIXED_EXPENSE_CATEGORIES
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Rent, Tuition, and Utilities are already "
+                "deducted automatically from your financial profile. "
+                "Do not add them as expense transactions."
+            ),
+        )
+    
 app = FastAPI()
 
 app.add_middleware(
@@ -34,6 +59,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -50,14 +76,18 @@ def get_db():
         db.close()
 
 @app.post("/assistant")
-def assistant(
-    request: AssistantMessageRequest,
-    db: Session = Depends(get_db)
-):
-    return handle_assistant_message(
-        db=db,
-        message=request.message
-    )
+def assistant(message: AssistantMessageRequest, db: Session = Depends(get_db)):
+    try:
+        return handle_assistant_message(
+            db,
+            message.message
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error)
+        ) from error
 
 @app.get("/")
 def home():
@@ -111,12 +141,17 @@ def create_transaction(
     transaction: TransactionCreate,
     db: Session = Depends(get_db)
 ):
+    validate_transaction_category(
+        transaction.category,
+        transaction.type,
+    )
+
     new_transaction = Transaction(
         date=transaction.date,
         description=transaction.description,
         amount=transaction.amount,
-        category=transaction.category,
-        type=transaction.type
+        category=transaction.category.strip(),
+        type=transaction.type,
     )
 
     db.add(new_transaction)
@@ -125,13 +160,12 @@ def create_transaction(
 
     return {
         "message": "Transaction created successfully",
-        "transaction_id": new_transaction.id
+        "transaction_id": new_transaction.id,
     }
 
 @app.get("/transactions")
 def get_transactions(db: Session = Depends(get_db)):
     transactions = db.query(Transaction).all()
-
     return transactions
 
 @app.post("/savings-goals")
@@ -226,8 +260,9 @@ def get_agent_logs(db: Session = Depends(get_db)):
     ]
 
 @app.get("/dashboard-summary")
-def get_dashboard_summary(db: Session = Depends(get_db)):
-
+def get_dashboard_summary(
+    db: Session = Depends(get_db)
+):
     profile = db.query(FinancialProfile).first()
 
     if profile is None:
@@ -236,21 +271,31 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
             "message": "No financial profile found"
         }
 
+    # Monthly financial calculations
     remaining_income = calculate_remaining_income(db)
     total_expenses = get_total_expenses(db)
 
+    # Calculate overall savings progress
     goals = db.query(SavingsGoal).all()
 
-    savings_progress = 0
+    total_savings_target = sum(
+        goal.target_amount for goal in goals
+    )
 
-    if goals:
-        progress = get_savings_progress(
-            db,
-            goal_id=goals[0].id
+    total_savings_saved = sum(
+        goal.current_amount for goal in goals
+    )
+
+    if total_savings_target > 0:
+        savings_progress = round(
+            (
+                total_savings_saved
+                / total_savings_target
+            ) * 100,
+            2
         )
-
-        if progress:
-            savings_progress = progress["progress_percentage"]
+    else:
+        savings_progress = 0
 
     return {
         "monthly_income": profile.monthly_income,
@@ -258,6 +303,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         "total_expenses": total_expenses,
         "savings_progress": savings_progress
     }
+
 
 @app.get("/savings-goals/{goal_id}/progress")
 def get_savings_goal_progress(
@@ -288,4 +334,219 @@ def get_budget_status_by_id(
     )
 
     return result
+@app.patch("/transactions/{transaction_id}")
+def update_transaction(
+    transaction_id: int,
+    updates: TransactionUpdate,
+    db: Session = Depends(get_db)
+):
+    transaction = db.get(Transaction, transaction_id)
 
+    if transaction is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Transaction not found",
+        )
+
+    data = updates.model_dump(exclude_unset=True)
+
+    if any(value is None for value in data.values()):
+        raise HTTPException(
+            status_code=422,
+            detail="Fields cannot be null",
+        )
+
+    updated_category = data.get(
+        "category",
+        transaction.category,
+    )
+
+    updated_type = data.get(
+        "type",
+        transaction.type,
+    )
+
+    validate_transaction_category(
+        updated_category,
+        updated_type,
+    )
+
+    for field, value in data.items():
+        if field == "category":
+            value = value.strip()
+
+        setattr(transaction, field, value)
+
+    db.commit()
+    db.refresh(transaction)
+
+    return {
+        "message": "Transaction updated successfully",
+        "transaction": transaction,
+    }
+
+@app.delete(
+    "/transactions/{transaction_id}",
+    status_code=status.HTTP_200_OK
+)
+def delete_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db)
+):
+    transaction = db.get(Transaction, transaction_id)
+
+    if transaction is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Transaction not found"
+        )
+
+    db.delete(transaction)
+    db.commit()
+
+    return {
+        "message": "Transaction deleted successfully",
+        "transaction_id": transaction_id
+    }
+
+@app.patch("/savings-goals/{goal_id}")
+def update_savings_goal(
+    goal_id: int,
+    updates: SavingsGoalUpdate,
+    db: Session = Depends(get_db)
+):
+    goal = db.get(SavingsGoal, goal_id)
+
+    if goal is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Savings goal not found"
+        )
+
+    data = updates.model_dump(exclude_unset=True)
+
+    if any(value is None for value in data.values()):
+        raise HTTPException(
+            status_code=422,
+            detail="Fields cannot be null"
+        )
+
+    for field, value in data.items():
+        setattr(goal, field, value)
+
+    db.commit()
+    db.refresh(goal)
+
+    return {
+        "message": "Savings goal updated successfully",
+        "goal": goal
+    }
+
+
+@app.delete("/savings-goals/{goal_id}")
+def delete_savings_goal(
+    goal_id: int,
+    db: Session = Depends(get_db)
+):
+    goal = db.get(SavingsGoal, goal_id)
+
+    if goal is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Savings goal not found"
+        )
+
+    db.delete(goal)
+    db.commit()
+
+    return {
+        "message": "Savings goal deleted successfully",
+        "goal_id": goal_id
+    }
+
+@app.patch("/budgets/{budget_id}")
+def update_budget(
+    budget_id: int,
+    updates: BudgetUpdate,
+    db: Session = Depends(get_db)
+):
+    budget = db.get(Budget, budget_id)
+
+    if budget is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Budget not found"
+        )
+
+    data = updates.model_dump(exclude_unset=True)
+
+    if any(value is None for value in data.values()):
+        raise HTTPException(
+            status_code=422,
+            detail="Fields cannot be null"
+        )
+
+    for field, value in data.items():
+        setattr(budget, field, value)
+
+    db.commit()
+    db.refresh(budget)
+
+    return {
+        "message": "Budget updated successfully",
+        "budget": budget
+    }
+
+
+@app.delete("/budgets/{budget_id}")
+def delete_budget(
+    budget_id: int,
+    db: Session = Depends(get_db)
+):
+    budget = db.get(Budget, budget_id)
+
+    if budget is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Budget not found"
+        )
+
+    db.delete(budget)
+    db.commit()
+
+    return {
+        "message": "Budget deleted successfully",
+        "budget_id": budget_id
+    }
+
+@app.patch("/profile")
+def update_profile(
+    updates: FinancialProfileUpdate,
+    db: Session = Depends(get_db)
+):
+    profile = db.query(FinancialProfile).first()
+
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Financial profile not found"
+        )
+
+    data = updates.model_dump(exclude_unset=True)
+
+    if any(value is None for value in data.values()):
+        raise HTTPException(
+            status_code=422,
+            detail="Fields cannot be null"
+        )
+
+    for field, value in data.items():
+        setattr(profile, field, value)
+
+    db.commit()
+    db.refresh(profile)
+
+    return {
+        "message": "Financial profile updated successfully",
+        "profile": profile
+    }

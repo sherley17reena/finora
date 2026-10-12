@@ -1,65 +1,213 @@
-from sqlalchemy import Column, Integer, String, Float
-from .database import Base
+
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+
+from sqlalchemy.orm import Session
+
+from app.models import Budget
+from app.tools import (
+    get_budgets,
+    get_budget_status,
+    simulate_purchase,
+)
 
 
-class FinancialProfile(Base):
-    __tablename__ = "financial_profiles"
+class BudgetAgent:
+    def __init__(self, db: Session):
+        self.db = db
+        self.name = "Budget Agent"
 
-    id = Column(Integer, primary_key=True, index=True)
+    def handle(self, action: str, **kwargs):
 
-    monthly_income = Column(Float, default=0)
+        # Existing feature: list budgets
+        if action == "get_budgets":
+            budgets = get_budgets(self.db)
 
-    rent = Column(Float, default=0)
-    tuition = Column(Float, default=0)
-    groceries = Column(Float, default=0)
-    transport = Column(Float, default=0)
-    utilities = Column(Float, default=0)
-    lifestyle_costs = Column(Float, default=0)
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "success",
+                "data": budgets,
+            }
 
-class Transaction(Base):
-    __tablename__ = "transactions"
+        # Existing feature: check budget status
+        if action == "get_budget_status":
+            status = get_budget_status(
+                self.db,
+                budget_id=kwargs["budget_id"],
+            )
 
-    id = Column(Integer, primary_key=True, index=True)
+            if status is None:
+                return {
+                    "agent": self.name,
+                    "action": action,
+                    "status": "error",
+                    "message": "Budget not found",
+                }
 
-    date = Column(String)
-    description = Column(String)
-    amount = Column(Float)
-    category = Column(String)
-    type = Column(String)
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "success",
+                "data": status,
+            }
 
-class SavingsGoal(Base):
-    __tablename__ = "savings_goals"
+        # Existing feature: simulate purchase
+        if action == "simulate_purchase":
+            simulation = simulate_purchase(
+                self.db,
+                purchase_amount=kwargs["purchase_amount"],
+            )
 
-    id = Column(Integer, primary_key=True, index=True)
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "success",
+                "data": simulation,
+            }
 
-    name = Column(String)
+        # New feature: preview a budget change
+        if action in (
+            "increase_budget",
+            "decrease_budget",
+            "set_budget",
+        ):
+            return self.preview_budget_change(
+                action=action,
+                category=kwargs.get("category"),
+                amount=kwargs.get("amount"),
+                budget_amount=kwargs.get("budget_amount"),
+                month=kwargs.get("month"),
+            )
 
-    target_amount = Column(Float)
-    current_amount = Column(Float, default=0)
+        return {
+            "agent": self.name,
+            "action": action,
+            "status": "error",
+            "message": "Unknown action",
+        }
 
-    target_date = Column(String)
+    def preview_budget_change(
+        self,
+        action,
+        category,
+        amount=None,
+        budget_amount=None,
+        month=None,
+    ):
+        # Default to the current month
+        current_month = date.today().strftime("%Y-%m")
 
-class Budget(Base):
-    __tablename__ = "budgets"
+        if month is None:
+            month = current_month
 
-    id = Column(Integer, primary_key=True, index=True)
+        # Only current-month updates are supported for now
+        if month != current_month:
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "error",
+                "message": (
+                    "Finora currently supports budget changes "
+                    "for the current month only."
+                ),
+            }
 
-    month = Column(String)
-    category = Column(String)
+        if not category or not category.strip():
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "error",
+                "message": "Please specify a budget category.",
+            }
 
-    budget_amount = Column(Float)
-    spent_amount = Column(Float, default=0)
+        # Find the budget for the correct month
+        budget = (
+            self.db.query(Budget)
+            .filter(
+                Budget.month == month,
+                Budget.category.ilike(category.strip()),
+            )
+            .first()
+        )
 
-class AgentLog(Base):
-    __tablename__ = "agent_logs"
+        if budget is None:
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "error",
+                "message": (
+                    f"No {category} budget exists for {month}. "
+                    "Please create one before updating it."
+                ),
+            }
 
-    id = Column(Integer, primary_key=True, index=True)
+        # Convert money to decimal values for calculations
+        def money(value):
+            return Decimal(str(value)).quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP,
+            )
 
-    agent = Column(String)
-    action = Column(String)
-    tool = Column(String)
+        old_amount = money(budget.budget_amount)
 
-    arguments = Column(String)
-    result = Column(String)
+        try:
+            if action in ("increase_budget", "decrease_budget"):
+                if amount is None or money(amount) <= 0:
+                    raise ValueError(
+                        "The adjustment amount must be greater than zero."
+                    )
 
-    timestamp = Column(String)
+                adjustment = money(amount)
+
+                if action == "increase_budget":
+                    new_amount = old_amount + adjustment
+                else:
+                    new_amount = old_amount - adjustment
+
+            elif action == "set_budget":
+                if budget_amount is None:
+                    raise ValueError(
+                        "Please provide the new budget amount."
+                    )
+
+                new_amount = money(budget_amount)
+
+            else:
+                raise ValueError("Unsupported budget action.")
+
+            if not new_amount.is_finite():
+                raise ValueError("Please provide a valid amount.")
+
+            if new_amount < 0:
+                raise ValueError(
+                    "A budget cannot be reduced below zero."
+                )
+
+        except (ValueError, TypeError, ArithmeticError) as error:
+            return {
+                "agent": self.name,
+                "action": action,
+                "status": "error",
+                "message": str(error),
+            }
+
+        # Important: this is a preview only.
+        # No database changes are made here.
+        return {
+            "agent": self.name,
+            "action": action,
+            "status": "confirmation_required",
+            "message": (
+                f"Change your {budget.category} budget "
+                f"from ${old_amount:,.2f} "
+                f"to ${new_amount:,.2f} for {month}?"
+            ),
+            "data": {
+                "budget_id": budget.id,
+                "category": budget.category,
+                "month": month,
+                "old_amount": float(old_amount),
+                "new_amount": float(new_amount),
+            },
+        }

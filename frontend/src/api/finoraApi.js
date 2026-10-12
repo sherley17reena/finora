@@ -91,3 +91,62 @@ export function askFinora(message) {
     }),
   });
 }
+export function updateTransaction(transactionId, updates) {
+  return request(`/transactions/${transactionId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteTransaction(transactionId) {
+  return request(`/transactions/${transactionId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getFinancialProfile() {
+  return request("/profile");
+}
+
+export function updateFinancialProfile(updates) {
+  return request("/profile", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
+}
+export function updateSavingsGoal(goalId, updates) {
+  return request(`/savings-goals/${goalId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteSavingsGoal(goalId) {
+  return request(`/savings-goals/${goalId}`, {
+    method: "DELETE",
+  });
+}
+export function updateBudget(budgetId, updates) {
+  return request(`/budgets/${budgetId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteBudget(budgetId) {
+  return request(`/budgets/${budgetId}`, {
+    method: "DELETE",
+  });
+}

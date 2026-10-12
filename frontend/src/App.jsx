@@ -10,6 +10,10 @@ import AgentActivity from "./pages/AgentActivity";
 
 import Sidebar from "./components/Sidebar";
 
+import {
+  updateTransaction,
+  deleteTransaction,
+} from "./api/finoraApi";
 
 function App() {
   const [summary, setSummary] = useState(null);
@@ -34,7 +38,7 @@ function App() {
 
   const [message, setMessage] = useState("");
 
-
+  
   // -----------------------------
   // Agent Activity
   // -----------------------------
@@ -58,37 +62,45 @@ function App() {
   // Dashboard
   // -----------------------------
 
-  const fetchDashboard = () => {
-    fetch("http://127.0.0.1:8000/dashboard-summary")
-      .then((response) => response.json())
-      .then((data) => {
-        setSummary(data);
-      })
-      .catch((error) => {
-        console.error(
-          "Error fetching dashboard:",
-          error
-        );
-      });
-  };
+  const fetchDashboard = async () => {
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/dashboard-summary"
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not fetch dashboard");
+      }
+
+      const data = await response.json();
+      setSummary(data);
+    } catch (error) {
+      console.error("Error fetching dashboard:", error);
+      throw error;
+    }
+};
 
 
   // -----------------------------
   // Transactions
   // -----------------------------
 
-  const fetchTransactions = () => {
-    fetch("http://127.0.0.1:8000/transactions")
-      .then((response) => response.json())
-      .then((data) => {
-        setTransactions(data);
-      })
-      .catch((error) => {
-        console.error(
-          "Error fetching transactions:",
-          error
-        );
-      });
+  const fetchTransactions = async () => {
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/transactions"
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not fetch transactions");
+      }
+
+      const data = await response.json();
+      setTransactions(data);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      throw error;
+    }
   };
 
 
@@ -262,6 +274,62 @@ function App() {
     }
   };
 
+  // -----------------------------
+  // Update Transaction
+  // -----------------------------
+
+  const handleUpdateTransaction = async (transactionId, updates) => {
+   setMessage("");
+
+  try {
+    await updateTransaction(transactionId, updates);
+
+    setMessage("Transaction updated successfully.");
+
+    // Refresh financial information
+    await Promise.all([
+      fetchTransactions(),
+      fetchDashboard(),
+      fetchBudgets(),
+    ]);
+
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+
+    setMessage("Could not update transaction. Please try again.");
+
+    throw error;
+  }
+};
+
+
+  // -----------------------------
+  // Delete Transaction
+  // -----------------------------
+
+  const handleDeleteTransaction = async (transactionId) => {
+    setMessage("");
+
+    try {
+      await deleteTransaction(transactionId);
+
+      setMessage("Transaction deleted successfully.");
+
+      // Refresh financial information
+      await Promise.all([
+        fetchTransactions(),
+        fetchDashboard(),
+        fetchBudgets(),
+      ]);
+
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+
+      setMessage("Could not delete transaction. Please try again.");
+
+      throw error;
+    }
+  };
 
   // -----------------------------
   // Refresh after AI changes data
@@ -299,6 +367,7 @@ function App() {
         {activePage === "dashboard" && (
           <Dashboard
             summary={summary}
+            onProfileUpdated={fetchDashboard}
           />
         )}
 
@@ -314,6 +383,8 @@ function App() {
             onAddExpense={
               handleAddExpense
             }
+            onUpdateTransaction={handleUpdateTransaction}
+            onDeleteTransaction={handleDeleteTransaction}
           />
         )}
 

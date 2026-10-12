@@ -1,6 +1,7 @@
 
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from datetime import datetime, date
 
 class FinancialProfileCreate(BaseModel):
     monthly_income: float
@@ -47,12 +48,20 @@ class AssistantIntent(BaseModel):
         "get_savings_progress",
         "get_budget_status",
         "analyze_purchase",
+        "increase_budget",
+        "decrease_budget",
+        "set_budget",
         "unknown",
     ]
 
     amount: Optional[float] = Field(
         default=None,
         gt=0
+    )
+
+    budget_amount: Optional[float] = Field(
+        default=None,
+        ge=0
     )
 
     purchase_amount: Optional[float] = Field(
@@ -77,3 +86,83 @@ class AssistantIntent(BaseModel):
     description: Optional[str] = None
     date: Optional[str] = None
     goal_name: Optional[str] = None
+
+
+class TransactionUpdate(BaseModel):
+    date: Optional[str] = None
+    description: Optional[str] = Field(
+        default=None, min_length=1
+    )
+    amount: Optional[float] = Field(
+        default=None, gt=0
+    )
+    category: Optional[str] = Field(
+        default=None, min_length=1
+    )
+    type: Optional[Literal["income", "expense"]] = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value):
+        if value is not None:
+            date.fromisoformat(value)
+        return value
+
+
+class SavingsGoalUpdate(BaseModel):
+    name: Optional[str] = Field(
+        default=None, min_length=1
+    )
+    target_amount: Optional[float] = Field(
+        default=None, gt=0
+    )
+    current_amount: Optional[float] = Field(
+        default=None, ge=0
+    )
+    target_date: Optional[str] = None
+
+    @field_validator("target_date")
+    @classmethod
+    def validate_target_date(cls, value):
+        if value is not None:
+            date.fromisoformat(value)
+        return value
+
+
+class BudgetUpdate(BaseModel):
+    month: Optional[str] = Field(
+        default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
+    )
+    category: Optional[str] = Field(
+        default=None, min_length=1
+    )
+    budget_amount: Optional[float] = Field(
+        default=None, ge=0
+    )
+    spent_amount: Optional[float] = Field(
+        default=None, ge=0
+    )
+
+
+class FinancialProfileUpdate(BaseModel):
+    monthly_income: Optional[float] = Field(
+        default=None, ge=0
+    )
+    rent: Optional[float] = Field(
+        default=None, ge=0
+    )
+    tuition: Optional[float] = Field(
+        default=None, ge=0
+    )
+    groceries: Optional[float] = Field(
+        default=None, ge=0
+    )
+    transport: Optional[float] = Field(
+        default=None, ge=0
+    )
+    utilities: Optional[float] = Field(
+        default=None, ge=0
+    )
+    lifestyle_costs: Optional[float] = Field(
+        default=None, ge=0
+    )
